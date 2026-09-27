@@ -132,6 +132,19 @@ nav.mainnav{display:flex; flex-direction:column; gap:2px;}
   #topbar .searchwrap{max-width:none;}
   .mobile-title{display:block;}
 }
+@media (max-width:400px){
+  .card{padding:14px;}
+}
+
+/* mobile "more" nav drawer */
+.drawer-overlay{position:fixed; inset:0; background:rgba(0,0,0,0.55); z-index:95; display:flex;}
+.drawer-panel{
+  width:250px; max-width:80vw; height:100%; background:var(--surface); border-right:1px solid var(--border);
+  padding:22px 16px; display:flex; flex-direction:column; gap:22px;
+  padding-top:calc(22px + env(safe-area-inset-top,0px));
+  animation:drawerIn .2s ease;
+}
+@keyframes drawerIn{from{transform:translateX(-12px); opacity:0;} to{transform:none; opacity:1;}}
 
 /* bottom nav (mobile) */
 #bottomnav{
@@ -243,9 +256,9 @@ table.dtable td{padding:8px 8px; border-bottom:1px solid var(--border);}
 .skeleton{background:linear-gradient(90deg,var(--surface-2) 25%, var(--surface) 37%, var(--surface-2) 63%); background-size:400% 100%; animation:sk 1.4s ease infinite; border-radius:12px;}
 @keyframes sk{0%{background-position:100% 0;} 100%{background-position:0 0;}}
 
-.calgrid{display:grid; grid-template-columns:repeat(7,1fr); gap:6px;}
+.calgrid{display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); grid-auto-rows:38px; gap:5px;}
 .calgrid .cal-dow{font-size:10.5px; color:var(--text-faint); text-align:center; font-weight:700; padding-bottom:4px;}
-.calcell{aspect-ratio:1; border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:12px; color:var(--text-muted); cursor:pointer; border:1px solid transparent; position:relative;}
+.calcell{width:100%; height:100%; min-width:0; border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:12px; color:var(--text-muted); cursor:pointer; border:1px solid transparent; position:relative; box-sizing:border-box;}
 .calcell.empty{visibility:hidden;}
 .calcell.today{border-color:var(--pink-dim);}
 .calcell.sel{border-color:var(--pink);}
@@ -253,6 +266,10 @@ table.dtable td{padding:8px 8px; border-bottom:1px solid var(--border);}
 .calcell.l1{background:var(--pink-soft); color:var(--text);}
 .calcell.l2{background:var(--pink-dim); color:#0A0A0A;}
 .calcell.l3{background:var(--green); color:#08150E; font-weight:800;}
+@media (max-width:400px){
+  .calgrid{grid-auto-rows:34px; gap:4px;}
+  .calcell{font-size:11px; border-radius:8px;}
+}
 .heatrow{display:grid; grid-auto-flow:column; gap:3px;}
 .heatcell{width:11px;height:11px;border-radius:3px; background:var(--surface-2);}
 .heatcell.h1{background:var(--pink-soft);}
@@ -289,47 +306,6 @@ window.__CT_BOOT = true;
 <script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore-compat.js"></script>
 <script>
 /* ============ Firebase setup ============ */
-/* Replace this with YOUR OWN Firebase project's config object.
-   Firebase console → ⚙ Project settings → General → "Your apps" →
-   SDK setup and configuration → Config. */
-var firebaseConfig = {
-  apiKey: "AIzaSyAwQOf3wJZ_KwDr_uicsQHni_toyhdn2UA",
-  authDomain: "chanttrack-fc50c.firebaseapp.com",
-  projectId: "chanttrack-fc50c",
-  storageBucket: "chanttrack-fc50c.firebasestorage.app",
-  messagingSenderId: "276812889398",
-  appId: "1:276812889398:web:210d7b71cc3ffcdcbdc797",
-  measurementId: "G-ZRVW6V6FSQ"
-};
-firebase.initializeApp(firebaseConfig);
-
-window.CT = window.CT || {};
-window.CT.auth = firebase.auth();
-window.CT.db = firebase.firestore();
-
-/* ============ Firebase setup ============ */
-/* Replace this with YOUR OWN Firebase project's config object.
-   Firebase console → ⚙ Project settings → General → "Your apps" →
-   SDK setup and configuration → Config. */
-var firebaseConfig = {
-  apiKey: "AIzaSyAwQOf3wJZ_KwDr_uicsQHni_toyhdn2UA",
-  authDomain: "chanttrack-fc50c.firebaseapp.com",
-  projectId: "chanttrack-fc50c",
-  storageBucket: "chanttrack-fc50c.firebasestorage.app",
-  messagingSenderId: "276812889398",
-  appId: "1:276812889398:web:210d7b71cc3ffcdcbdc797",
-  measurementId: "G-ZRVW6V6FSQ"
-};
-firebase.initializeApp(firebaseConfig);
-
-window.CT = window.CT || {};
-window.CT.auth = firebase.auth();
-window.CT.db = firebase.firestore();
-
-/* ============ Firebase setup ============ */
-/* Replace this with YOUR OWN Firebase project's config object.
-   Firebase console → ⚙ Project settings → General → "Your apps" →
-   SDK setup and configuration → Config. */
 var firebaseConfig = {
   apiKey: "AIzaSyAwQOf3wJZ_KwDr_uicsQHni_toyhdn2UA",
   authDomain: "chanttrack-fc50c.firebaseapp.com",
@@ -590,7 +566,8 @@ var ICONS = {
   clock: ic('<circle cx="12" cy="12" r="9"/><path d="M12 7v5l4 2"/>'),
   stopwatch: ic('<circle cx="12" cy="13" r="8"/><path d="M12 9v4l3 2"/><path d="M9 2h6M12 2v3"/>'),
   shield: ic('<path d="M12 2l8 4v6c0 5-3.5 8-8 10-4.5-2-8-5-8-10V6z"/>'),
-  home: ic('<path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/>')
+  home: ic('<path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/>'),
+  menu: ic('<path d="M4 7h16M4 12h16M4 17h16"/>')
 };
 window.CT = window.CT || {}; window.CT.ICONS = ICONS;
 
@@ -800,7 +777,7 @@ function renderShell(){
   '<div id="main">'+
     '<div id="topbar">'+
       (showBack ? '<button class="iconbtn" id="backBtn" title="Back">'+ICONS.chevronL+'</button>' : '')+
-      '<div class="mobile-title">'+CT.LOTUS_MARK(24)+'</div>'+
+      '<button class="mobile-title" id="menuBtn" title="Menu" style="background:none; border:none; padding:0; cursor:pointer;">'+CT.LOTUS_MARK(24)+'</button>'+
       '<div class="searchwrap">'+ICONS.search+'<input type="search" id="globalsearch" placeholder="Search sessions, chants, notes..." value="'+(baseName==='search'&&r.params[0]?CT.esc(decodeURIComponent(r.params[0])):'')+'"></div>'+
       '<div class="topbar-spacer"></div>'+
       '<button class="theme-toggle" id="themeBtn" title="Toggle theme">'+(isDark?ICONS.sun:ICONS.moon)+'</button>'+
@@ -814,9 +791,32 @@ function renderShell(){
   document.getElementById('themeBtn').addEventListener('click', toggleTheme);
   var backBtn = document.getElementById('backBtn');
   if(backBtn) backBtn.addEventListener('click', CT.goBack);
+  var menuBtn = document.getElementById('menuBtn');
+  if(menuBtn) menuBtn.addEventListener('click', function(){ openNavDrawer(baseName); });
   var sb = document.getElementById('globalsearch');
   sb.addEventListener('keydown', function(e){
     if(e.key==='Enter' && sb.value.trim()){ location.hash = '#/search/'+encodeURIComponent(sb.value.trim()); }
+  });
+}
+
+function openNavDrawer(baseName){
+  var overlay = document.createElement('div');
+  overlay.className = 'drawer-overlay';
+  overlay.innerHTML =
+    '<div class="drawer-panel">'+
+      '<div class="brand">'+CT.LOTUS_MARK(34)+'<div><div class="brand-name">ChantTrack</div><div class="brand-tag">Grow through consistency</div></div></div>'+
+      '<nav class="mainnav">'+ NAV_ITEMS.map(function(it){
+        return '<button class="navlink'+(it.route===baseName?' active':'')+'" data-nav="'+it.route+'">'+ICONS[it.icon]+'<span>'+it.label+'</span></button>';
+      }).join('') + '</nav>'+
+      '<div class="sidebar-cta">'+
+        '<p>'+CT.esc(CT.quoteForToday())+'</p>'+
+        '<button class="btn btn-primary btn-block btn-sm" data-nav="chant">Start Chanting</button>'+
+      '</div>'+
+    '</div>'+
+    '<div style="flex:1;"></div>';
+  document.body.appendChild(overlay);
+  overlay.addEventListener('click', function(e){
+    if(!e.target.closest('.drawer-panel') || e.target.closest('[data-nav]')){ overlay.remove(); }
   });
 }
 
