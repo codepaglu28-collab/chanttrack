@@ -666,7 +666,9 @@ var ICONS = {
   stopwatch: ic('<circle cx="12" cy="13" r="8"/><path d="M12 9v4l3 2"/><path d="M9 2h6M12 2v3"/>'),
   shield: ic('<path d="M12 2l8 4v6c0 5-3.5 8-8 10-4.5-2-8-5-8-10V6z"/>'),
   home: ic('<path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/>'),
-  menu: ic('<path d="M4 7h16M4 12h16M4 17h16"/>')
+  menu: ic('<path d="M4 7h16M4 12h16M4 17h16"/>'),
+  lock: ic('<rect x="5" y="11" width="14" height="10" rx="2.5"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>'),
+  info: ic('<circle cx="12" cy="12" r="9"/><path d="M12 11v6"/><circle cx="12" cy="7.8" r="0.6" fill="currentColor" stroke="none"/>')
 };
 window.CT = window.CT || {}; window.CT.ICONS = ICONS;
 
@@ -807,9 +809,10 @@ var NAV_ITEMS = [
   {route:'goals', label:'Goals', icon:'goal'},
   {route:'journal', label:'Journal', icon:'journal'},
   {route:'chants', label:'Chants', icon:'chants'},
-  {route:'settings', label:'Settings', icon:'settings'}
+  {route:'settings', label:'Settings', icon:'settings'},
+  {route:'about', label:'About', icon:'info'}
 ];
-var TITLES = {dashboard:'ChantTrack', chant:'Chant', calendar:'Calendar', stats:'Statistics', goals:'Goals', journal:'Journal', chants:'Chants', settings:'Settings', search:'Search', timer:'Timer', stopwatch:'Stopwatch'};
+var TITLES = {dashboard:'ChantTrack', chant:'Chant', calendar:'Calendar', stats:'Statistics', goals:'Goals', journal:'Journal', chants:'Chants', settings:'Settings', about:'About', search:'Search', timer:'Timer', stopwatch:'Stopwatch'};
 
 function currentRoute(){
   var h = location.hash.replace('#/','') || 'dashboard';
@@ -2150,7 +2153,44 @@ CT.printSummary = function(){
 (function(){
 "use strict";
 var CT = window.CT;
+/* lives outside CT.PAGES.settings so it survives re-renders triggered by
+   Firestore data updates while the user is sitting on this page — it
+   should only re-lock when they actually navigate away and back. */
+var privacyUnlocked = false;
+CT._relockPrivacy = function(){ privacyUnlocked = false; };
+
 CT.PAGES.settings = function(view){
+  var hasPassword = !!(CT.currentUser && CT.currentUser.providerData && CT.currentUser.providerData.some(function(p){ return p.providerId==='password'; }));
+  if(!hasPassword) privacyUnlocked = true;
+
+  function privacyError(err){
+    var map = {
+      'auth/wrong-password':'Incorrect password.',
+      'auth/invalid-credential':'Incorrect password.',
+      'auth/too-many-requests':'Too many attempts — please wait a moment and try again.',
+      'auth/network-request-failed':'Network error — check your connection.'
+    };
+    return (err && map[err.code]) || 'Could not verify your password. Please try again.';
+  }
+
+  function privacyBlock(){
+    if(privacyUnlocked){
+      return '<div class="card">'+
+        '<p style="font-size:13px; color:var(--text-muted); line-height:1.6; margin:0 0 14px;">ChantTrack stores your sessions, goals, and journal entries in your account, synced through Firebase. Only you can read or write your own data — nothing is shared with other users.</p>'+
+        '<div style="display:flex; gap:10px; flex-wrap:wrap;">'+
+          '<button class="btn btn-danger" id="resetAll">Delete all data</button>'+
+        '</div>'+
+      '</div>';
+    }
+    return '<div class="card" style="text-align:center; padding:30px 20px;">'+
+      '<div style="width:44px;height:44px;border-radius:50%;background:var(--surface-2);display:flex;align-items:center;justify-content:center;margin:0 auto 12px; color:var(--text-muted);">'+CT.ICONS.lock+'</div>'+
+      '<div style="font-weight:700; font-size:14px; margin-bottom:4px;">This section is locked</div>'+
+      '<div style="font-size:12.5px; color:var(--text-muted); margin-bottom:16px;">Enter your account password to view privacy &amp; data controls.</div>'+
+      '<div class="field" style="max-width:260px;margin:0 auto 10px; text-align:left;"><input type="password" id="privacyPassword" placeholder="Password"></div>'+
+      '<button class="btn btn-primary" id="privacyUnlockBtn">'+CT.ICONS.lock+' Unlock</button>'+
+    '</div>';
+  }
+
   function draw(){
     var s = CT.State.data.settings;
     var isDark = CT.State.data.theme ? CT.State.data.theme==='dark' : true;
@@ -2187,13 +2227,8 @@ CT.PAGES.settings = function(view){
       '<button class="btn btn-secondary" id="expPdf">Print / Save as PDF</button>'+
     '</div>'+
 
-    '<div class="section-head"><h2 style="font-size:14px;">Privacy</h2></div>'+
-    '<div class="card">'+
-      '<p style="font-size:13px; color:var(--text-muted); line-height:1.6; margin:0 0 14px;">ChantTrack stores your sessions, goals, and journal entries in your account, synced through Firebase. Only you can read or write your own data — nothing is shared with other users.</p>'+
-      '<div style="display:flex; gap:10px; flex-wrap:wrap;">'+
-        '<button class="btn btn-danger" id="resetAll">Delete all data</button>'+
-      '</div>'+
-    '</div>'+
+    '<div class="section-head"><h2 style="font-size:14px;">Privacy</h2>'+(hasPassword?'<span class="tag">'+(privacyUnlocked?'Unlocked':CT.ICONS.lock+' Locked')+'</span>':'')+'</div>'+
+    privacyBlock()+
     '<p style="text-align:center; font-size:11px; color:var(--text-faint); margin-top:24px;">ChantTrack · v1.0</p>';
 
     view.querySelector('#signOutBtn').addEventListener('click', function(){
@@ -2218,7 +2253,8 @@ CT.PAGES.settings = function(view){
     view.querySelector('#expCsv').addEventListener('click', CT.exportCSV);
     view.querySelector('#expJson').addEventListener('click', CT.exportJSON);
     view.querySelector('#expPdf').addEventListener('click', CT.printSummary);
-    view.querySelector('#resetAll').addEventListener('click', function(){
+    var resetBtn = view.querySelector('#resetAll');
+    if(resetBtn) resetBtn.addEventListener('click', function(){
       CT.confirmModal({title:'Delete all ChantTrack data?', body:'This permanently deletes every session, goal, chant, and journal entry in your account. This cannot be undone.', danger:true, confirmLabel:'Delete everything'}).then(function(ok){
         if(ok){
           CT.State.deleteEverything().then(function(){
@@ -2229,8 +2265,44 @@ CT.PAGES.settings = function(view){
         }
       });
     });
+    var unlockBtn = view.querySelector('#privacyUnlockBtn');
+    if(unlockBtn){
+      var pwField = view.querySelector('#privacyPassword');
+      function tryUnlock(){
+        var pw = pwField.value;
+        if(!pw){ CT.toast('Enter your password', 'error'); return; }
+        unlockBtn.setAttribute('disabled','true');
+        var cred = firebase.auth.EmailAuthProvider.credential(CT.currentUser.email, pw);
+        CT.currentUser.reauthenticateWithCredential(cred).then(function(){
+          privacyUnlocked = true;
+          draw();
+        }).catch(function(err){
+          unlockBtn.removeAttribute('disabled');
+          CT.toast(privacyError(err), 'error');
+        });
+      }
+      unlockBtn.addEventListener('click', tryUnlock);
+      pwField.addEventListener('keydown', function(e){ if(e.key==='Enter') tryUnlock(); });
+    }
   }
   draw();
+};
+
+/* ============ ABOUT ============ */
+CT.PAGES.about = function(view){
+  view.innerHTML =
+  '<div class="section-head"><h2>About</h2></div>'+
+  '<div class="card" style="text-align:center; padding:40px 24px;">'+
+    CT.LOTUS_MARK(52)+
+    '<div class="brand-name" style="font-size:20px; margin-top:12px;">ChantTrack</div>'+
+    '<div style="font-family:\'Fraunces\',serif; font-style:italic; color:var(--text-muted); margin-top:4px;">Grow through consistency.</div>'+
+  '</div>'+
+  '<div class="section-head"><h2 style="font-size:14px;">Created by</h2></div>'+
+  '<div class="card" style="display:flex; align-items:center; gap:14px;">'+
+    '<div style="width:46px;height:46px;border-radius:50%;background:linear-gradient(155deg,var(--pink-soft),var(--green-soft));display:flex;align-items:center;justify-content:center; font-family:\'Fraunces\',serif; font-weight:600; font-size:18px; color:var(--pink); flex-shrink:0;">N</div>'+
+    '<div><div style="font-weight:700; font-size:15px;">Neekith</div><div style="font-size:12.5px; color:var(--text-muted);">Creator of ChantTrack</div></div>'+
+  '</div>'+
+  '<p style="text-align:center; font-size:11px; color:var(--text-faint); margin-top:24px;">ChantTrack · v1.0</p>';
 };
 })();
 
@@ -2346,6 +2418,7 @@ CT.auth.onAuthStateChanged(function(user){
   } else {
     CT.currentUser = null;
     CT.State.detach();
+    if(CT._relockPrivacy) CT._relockPrivacy();
     location.hash = '#/dashboard';
     renderAuthScreen();
   }
