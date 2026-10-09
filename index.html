@@ -262,7 +262,7 @@ nav.mainnav{display:flex; flex-direction:column; gap:2px;}
 .tag.pink{background:var(--pink-soft); color:var(--pink);}
 .tag.green{background:var(--green-soft); color:var(--green);}
 
-input[type=text], input[type=number], input[type=time], input[type=email], input[type=password], textarea, select{
+input[type=text], input[type=number], input[type=time], input[type=date], input[type=email], input[type=password], textarea, select{
   width:100%; background:var(--surface-2); border:1px solid var(--border); color:var(--text);
   padding:10px 13px; border-radius:12px; font-size:14px; font-family:inherit; outline:none;
   transition:border-color .2s var(--ease), background .2s var(--ease), box-shadow .2s var(--ease);
@@ -865,8 +865,7 @@ function renderShell(){
       return '<button class="navlink'+(it.route===baseName?' active':'')+'" data-nav="'+it.route+'">'+ICONS[it.icon]+'<span>'+it.label+'</span></button>';
     }).join('') + '</nav>'+
     '<div class="sidebar-cta">'+
-      '<p>'+CT.esc(CT.quoteForToday())+'</p>'+
-      '<button class="btn btn-primary btn-block btn-sm" data-nav="chant">Start Chanting</button>'+
+      '<button class="btn btn-primary btn-block btn-sm" id="sidebarSignOut">Sign out</button>'+
     '</div>'+
   '</aside>'+
   '<div id="main">'+
@@ -883,6 +882,8 @@ function renderShell(){
   document.getElementById('themeBtn').addEventListener('click', toggleTheme);
   var backBtn = document.getElementById('backBtn');
   if(backBtn) backBtn.addEventListener('click', CT.goBack);
+  var sbOut = document.getElementById('sidebarSignOut');
+  if(sbOut) sbOut.addEventListener('click', function(){ CT.auth.signOut(); });
   var menuBtn = document.getElementById('menuBtn');
   if(menuBtn) menuBtn.addEventListener('click', function(){ openNavDrawer(baseName); });
   var sb = document.getElementById('globalsearch');
@@ -901,12 +902,12 @@ function openNavDrawer(baseName){
         return '<button class="navlink'+(it.route===baseName?' active':'')+'" data-nav="'+it.route+'">'+ICONS[it.icon]+'<span>'+it.label+'</span></button>';
       }).join('') + '</nav>'+
       '<div class="sidebar-cta">'+
-        '<p>'+CT.esc(CT.quoteForToday())+'</p>'+
-        '<button class="btn btn-primary btn-block btn-sm" data-nav="chant">Start Chanting</button>'+
+        '<button class="btn btn-primary btn-block btn-sm" id="drawerSignOut">Sign out</button>'+
       '</div>'+
     '</div>'+
     '<div style="flex:1;"></div>';
   document.body.appendChild(overlay);
+  overlay.querySelector('#drawerSignOut').addEventListener('click', function(){ overlay.remove(); CT.auth.signOut(); });
   overlay.addEventListener('click', function(e){
     if(!e.target.closest('.drawer-panel') || e.target.closest('[data-nav]')){ overlay.remove(); }
   });
@@ -2101,27 +2102,53 @@ CT.PAGES.search = function(view, params){
 "use strict";
 var CT = window.CT;
 function csvEscape(v){ v = v==null?'':String(v); if(/[",\n]/.test(v)) return '"'+v.replace(/"/g,'""')+'"'; return v; }
+CT.exportRange = CT.exportRange || {from:'', to:''};
+CT.rangeSessions = function(){
+  var r = CT.exportRange;
+  return CT.State.data.sessions.filter(function(s){
+    var d = String(s.date||'').slice(0,10);
+    if(r.from && d < r.from) return false;
+    if(r.to && d > r.to) return false;
+    return true;
+  });
+};
+CT.rangeSuffix = function(){
+  var r = CT.exportRange;
+  return (r.from||r.to) ? '-'+(r.from||'start')+'_to_'+(r.to||'now') : '';
+};
+CT.rangeValid = function(){
+  var r = CT.exportRange;
+  if(r.from && r.to && r.from > r.to){ CT.toast('"From" date must be before "To" date.', 'error'); return false; }
+  if(!CT.rangeSessions().length){ CT.toast('No sessions in the selected date range.', 'error'); return false; }
+  return true;
+};
 CT.exportCSV = function(){
+  if(!CT.rangeValid()) return;
   var rows = [['Date','Type','Title','Duration (min)','Chant','Repetitions','Mood before','Mood after','Notes','Reflection']];
-  CT.State.data.sessions.slice().sort(function(a,b){return a.date<b.date?-1:1;}).forEach(function(s){
+  CT.rangeSessions().sort(function(a,b){return a.date<b.date?-1:1;}).forEach(function(s){
     var chant = CT.chantById(s.chantId);
     rows.push([s.date, CT.typeLabel(s.type), s.title||'', Math.round((s.duration/60)*10)/10, chant?chant.name:'', s.reps!=null?s.reps:'', s.moodBefore!=null?s.moodBefore:'', s.moodAfter!=null?s.moodAfter:'', s.notes||'', s.reflection||'']);
   });
   var csv = rows.map(function(r){ return r.map(csvEscape).join(','); }).join('\n');
-  CT.offerDownload('chanttrack-export-'+CT.todayStr()+'.csv', csv);
+  CT.offerDownload('chanttrack-export-'+CT.todayStr()+CT.rangeSuffix()+'.csv', csv);
 };
 CT.exportJSON = function(){
+  if(!CT.rangeValid()) return;
   var data = {
     exportedAt: new Date().toISOString(),
-    sessions: CT.State.data.sessions,
+    range: {from: CT.exportRange.from||null, to: CT.exportRange.to||null},
+    sessions: CT.rangeSessions(),
     goals: CT.State.data.goals,
     chants: CT.State.data.chants,
     milestonesReached: CT.State.data.milestonesReached
   };
-  CT.offerDownload('chanttrack-export-'+CT.todayStr()+'.json', JSON.stringify(data,null,2));
+  CT.offerDownload('chanttrack-export-'+CT.todayStr()+CT.rangeSuffix()+'.json', JSON.stringify(data,null,2));
 };
 CT.printSummary = function(){
-  var sessions = CT.State.data.sessions;
+  if(!CT.rangeValid()) return;
+  var sessions = CT.rangeSessions();
+  var rg = CT.exportRange;
+  var rangeLabel = (rg.from||rg.to) ? (rg.from||'start')+' to '+(rg.to||'today') : 'All time';
   var totalSec = CT.sumDuration(sessions);
   var streak = CT.computeStreak();
   var win = window.open('', '_blank');
@@ -2134,7 +2161,7 @@ CT.printSummary = function(){
     '<html><head><title>ChantTrack Summary</title><style>'+
     'body{font-family:sans-serif; padding:32px; color:#111;} h1{margin-bottom:2px;} table{width:100%; border-collapse:collapse; margin-top:20px;} td,th{padding:6px 8px; border-bottom:1px solid #ddd; font-size:12px; text-align:left;} .stats{display:flex; gap:24px; margin:18px 0;} .s{font-size:22px; font-weight:700;} .l{font-size:11px; color:#666;}'+
     '</style></head><body>'+
-    '<h1>ChantTrack — Practice Summary</h1><div class="l">Generated '+new Date().toLocaleDateString()+'</div>'+
+    '<h1>ChantTrack — Practice Summary</h1><div class="l">Generated '+new Date().toLocaleDateString()+' · Range: '+rangeLabel+'</div>'+
     '<div class="stats">'+
       '<div><div class="s">'+CT.fmtDuration(totalSec)+'</div><div class="l">Total time</div></div>'+
       '<div><div class="s">'+sessions.length+'</div><div class="l">Total sessions</div></div>'+
@@ -2221,10 +2248,17 @@ CT.PAGES.settings = function(view){
     '</div>'+
 
     '<div class="section-head"><h2 style="font-size:14px;">Export your data</h2></div>'+
-    '<div class="card" style="display:flex; gap:10px; flex-wrap:wrap;">'+
+    '<div class="card">'+
+      '<div style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:14px;">'+
+        '<div class="field" style="flex:1; min-width:130px; margin:0;"><label>From</label><input type="date" id="expFrom" value="'+CT.exportRange.from+'"></div>'+
+        '<div class="field" style="flex:1; min-width:130px; margin:0;"><label>To</label><input type="date" id="expTo" value="'+CT.exportRange.to+'"></div>'+
+      '</div>'+
+      '<div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; font-size:12px; color:var(--text-muted);"><span id="expCount"></span><button class="btn btn-ghost btn-sm" id="expClear">All time</button></div>'+
+      '<div style="display:flex; gap:10px; flex-wrap:wrap;">'+
       '<button class="btn btn-secondary" id="expCsv">CSV</button>'+
       '<button class="btn btn-secondary" id="expJson">JSON</button>'+
       '<button class="btn btn-secondary" id="expPdf">Print / Save as PDF</button>'+
+      '</div>'+
     '</div>'+
 
     '<div class="section-head"><h2 style="font-size:14px;">Privacy</h2>'+(hasPassword?'<span class="tag">'+(privacyUnlocked?'Unlocked':CT.ICONS.lock+' Locked')+'</span>':'')+'</div>'+
@@ -2249,6 +2283,17 @@ CT.PAGES.settings = function(view){
         if(idx>-1) s.reminderDays.splice(idx,1); else s.reminderDays.push(d);
         CT.State.saveProfile(); draw();
       });
+    });
+    function updExpCount(){
+      var n = CT.rangeSessions().length;
+      view.querySelector('#expCount').textContent = n+' session'+(n===1?'':'s')+' in range';
+    }
+    updExpCount();
+    view.querySelector('#expFrom').addEventListener('change', function(e){ CT.exportRange.from = e.target.value; updExpCount(); });
+    view.querySelector('#expTo').addEventListener('change', function(e){ CT.exportRange.to = e.target.value; updExpCount(); });
+    view.querySelector('#expClear').addEventListener('click', function(){
+      CT.exportRange.from = ''; CT.exportRange.to = '';
+      view.querySelector('#expFrom').value = ''; view.querySelector('#expTo').value = ''; updExpCount();
     });
     view.querySelector('#expCsv').addEventListener('click', CT.exportCSV);
     view.querySelector('#expJson').addEventListener('click', CT.exportJSON);
