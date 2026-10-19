@@ -1096,7 +1096,7 @@ CT.PAGES.timer = function(view){
         (!Timer.running ?
           '<button class="btn btn-primary" id="tStart">'+CT.ICONS.play+' '+(Timer.accumulated>0?'Resume':'Start')+'</button>' :
           '<button class="btn btn-secondary" id="tPause">'+CT.ICONS.pause+' Pause</button>')+
-        (Timer.accumulated>0 || Timer.running ? '<button class="btn btn-secondary" id="tFocus">Focus mode</button>' : '')+
+        '<button class="btn btn-secondary" id="tFocus">'+CT.ICONS.moon+' Focus mode</button>'+
         (Timer.accumulated>0 && !Timer.running ? '<button class="btn btn-green" id="tSave">'+CT.ICONS.check+' Save session</button>' : '')+
         (Timer.accumulated>0 ? '<button class="btn btn-ghost" id="tReset">'+CT.ICONS.reset+' Reset</button>' : '')+
       '</div>'+
@@ -1176,13 +1176,15 @@ CT.PAGES.timer = function(view){
       overlay.innerHTML =
         '<div class="lotus-breathe">'+CT.LOTUS_MARK(72)+'</div>'+
         '<div class="bignum" id="focusRemainingText">'+CT.fmtClock(remaining)+'</div>'+
-        '<div id="focusStatusText" style="color:var(--text-muted); font-size:12px; letter-spacing:0.08em; font-weight:700;">'+(Timer.running?'CHANTING':'PAUSED')+'</div>'+
+        '<div id="focusStatusText" style="color:var(--text-muted); font-size:12px; letter-spacing:0.08em; font-weight:700;">'+(Timer.running?'CHANTING':(Timer.accumulated>0?'PAUSED':'READY'))+'</div>'+
         '<div style="display:flex; gap:12px;">'+
-        '<button class="btn btn-secondary" id="fPause">'+(Timer.running?CT.ICONS.pause+' Pause':CT.ICONS.play+' Resume')+'</button>'+
+        '<button class="btn btn-secondary" id="fPause">'+(Timer.running?CT.ICONS.pause+' Pause':CT.ICONS.play+' '+(Timer.accumulated>0?'Resume':'Start'))+'</button>'+
         '<button class="btn btn-ghost" id="fExit">'+CT.ICONS.x+' Exit</button>'+
         '</div>';
       overlay.querySelector('#fPause').addEventListener('click', function(){
-        if(Timer.running){ Timer.pause(); } else { Timer.resume(); }
+        if(Timer.running){ Timer.pause(); }
+        else if(Timer.accumulated>0){ Timer.resume(); }
+        else { Timer.start(Timer.presetSeconds, Timer.label); }
         fdraw();
       });
       overlay.querySelector('#fExit').addEventListener('click', function(){
@@ -1245,6 +1247,7 @@ CT.PAGES.stopwatch = function(view){
       '<div style="display:flex; gap:10px; justify-content:center; margin-top:8px; flex-wrap:wrap;">'+
         (!SW.running ? '<button class="btn btn-primary" id="swStart">'+CT.ICONS.play+' '+(SW.accumulated>0?'Resume':'Start')+'</button>' : '<button class="btn btn-secondary" id="swPause">'+CT.ICONS.pause+' Pause</button>')+
         (SW.running ? '<button class="btn btn-secondary" id="swLap">Lap</button>' : '')+
+        '<button class="btn btn-secondary" id="swFocus">'+CT.ICONS.moon+' Focus mode</button>'+
         (SW.accumulated>0 && !SW.running ? '<button class="btn btn-green" id="swSave">'+CT.ICONS.check+' Save session</button>' : '')+
         (SW.accumulated>0 ? '<button class="btn btn-ghost" id="swReset">'+CT.ICONS.reset+' Reset</button>' : '')+
       '</div>'+
@@ -1261,6 +1264,7 @@ CT.PAGES.stopwatch = function(view){
     var b2=view.querySelector('#swPause'); if(b2) b2.addEventListener('click', function(){ SW.pause(); stopLoop(); draw(); });
     var b3=view.querySelector('#swLap'); if(b3) b3.addEventListener('click', function(){ SW.lap(); draw(); });
     var b4=view.querySelector('#swReset'); if(b4) b4.addEventListener('click', function(){ stopLoop(); SW.clear(); draw(); });
+    var bf=view.querySelector('#swFocus'); if(bf) bf.addEventListener('click', enterFocus);
     var b5=view.querySelector('#swSave'); if(b5) b5.addEventListener('click', function(){
       var dur = SW.accumulated/1000;
       var r = CT.createSession({type:'stopwatch', duration:dur, title: SW.label||'Stopwatch session', laps: SW.laps.slice()});
@@ -1279,6 +1283,39 @@ CT.PAGES.stopwatch = function(view){
   }
   function startLoop(){ stopLoop(); interval = setInterval(tick, 100); }
   function stopLoop(){ if(interval){ clearInterval(interval); interval=null; } }
+  function enterFocus(){
+    stopLoop();
+    var overlay = document.createElement('div');
+    overlay.className = 'focusscreen';
+    document.body.appendChild(overlay);
+    var fi;
+    function fdraw(){
+      overlay.innerHTML =
+        '<div class="lotus-breathe">'+CT.LOTUS_MARK(72)+'</div>'+
+        '<div class="bignum" id="focusSwText">'+CT.fmtClockMs(SW.elapsedMs())+'</div>'+
+        '<div style="color:var(--text-muted); font-size:12px; letter-spacing:0.08em; font-weight:700;">'+(SW.running?'CHANTING':(SW.accumulated>0?'PAUSED':'READY'))+'</div>'+
+        '<div style="display:flex; gap:12px; flex-wrap:wrap; justify-content:center;">'+
+        '<button class="btn btn-secondary" id="fPause">'+(SW.running?CT.ICONS.pause+' Pause':CT.ICONS.play+' '+(SW.accumulated>0?'Resume':'Start'))+'</button>'+
+        (SW.running ? '<button class="btn btn-secondary" id="fLap">Lap</button>' : '')+
+        '<button class="btn btn-ghost" id="fExit">'+CT.ICONS.x+' Exit</button>'+
+        '</div>';
+      overlay.querySelector('#fPause').addEventListener('click', function(){
+        if(SW.running){ SW.pause(); } else { SW.start(); }
+        fdraw();
+      });
+      var lapBtn = overlay.querySelector('#fLap');
+      if(lapBtn) lapBtn.addEventListener('click', function(){ SW.lap(); CT.toast('Lap '+SW.laps.length+' recorded','success'); });
+      overlay.querySelector('#fExit').addEventListener('click', function(){
+        clearInterval(fi); overlay.remove(); draw(); if(SW.running) startLoop();
+      });
+    }
+    function ftick(){
+      var t = document.getElementById('focusSwText');
+      if(t) t.textContent = CT.fmtClockMs(SW.elapsedMs());
+    }
+    fdraw();
+    fi = setInterval(ftick, 100);
+  }
   draw();
   if(SW.running) startLoop();
   CT._cleanupPage = function(){ stopLoop(); };
@@ -1996,12 +2033,20 @@ CT.PAGES.chants = function(view, params){
         '<div class="li-main"><div class="li-title">'+CT.esc(c.name)+'</div>'+
         '<div class="li-sub">'+sessions.length+' sessions · '+CT.fmtDuration(total)+(last?' · last '+CT.fmtDateHuman(last):'')+'</div></div>'+
         '<div class="li-val">'+CT.ICONS.chevronR+'</div>'+
+        '<button class="iconbtn" data-edit="'+c.id+'" aria-label="Edit chant" style="flex-shrink:0;">'+CT.ICONS.edit+'</button>'+
       '</div>';
     }).join('')+'</div>' : CT.emptyState('Your chant library is empty.','Add the mantras or chants you practice to track them individually.'));
 
     view.querySelector('#newChantBtn').addEventListener('click', openNewChant);
     view.querySelectorAll('[data-chant]').forEach(function(el){
-      el.addEventListener('click', function(e){ if(e.target.closest('[data-star]')) return; location.hash = '#/chants/'+el.dataset.chant; });
+      el.addEventListener('click', function(e){ if(e.target.closest('[data-star]') || e.target.closest('[data-edit]')) return; location.hash = '#/chants/'+el.dataset.chant; });
+    });
+    view.querySelectorAll('[data-edit]').forEach(function(el){
+      el.addEventListener('click', function(e){
+        e.stopPropagation();
+        var c = CT.State.data.chants.find(function(x){return x.id===el.dataset.edit;});
+        if(c) openEditChant(c);
+      });
     });
     view.querySelectorAll('[data-star]').forEach(function(el){
       el.addEventListener('click', function(e){
@@ -2012,6 +2057,30 @@ CT.PAGES.chants = function(view, params){
         if(ref) ref.collection('chants').doc(c.id).set(c, {merge:true}).catch(function(){});
         draw();
       });
+    });
+  }
+  function openEditChant(c){
+    var overlay = document.createElement('div');
+    overlay.className='modal-overlay';
+    overlay.innerHTML = '<div class="modal">'+
+      '<h3>Edit chant</h3>'+
+      '<div class="field"><label>Name</label><input type="text" id="eName" value="'+CT.esc(c.name)+'"></div>'+
+      '<div class="field"><label>Description (optional)</label><textarea id="eDesc" rows="2">'+CT.esc(c.description||'')+'</textarea></div>'+
+      '<div class="field"><label>Target repetitions (optional)</label><input type="number" id="eReps" min="0" value="'+CT.esc(c.targetReps==null?'':String(c.targetReps))+'"></div>'+
+      '<div class="modal-actions"><button class="btn btn-ghost" id="eCancel">Cancel</button><button class="btn btn-primary" id="eSave">Save</button></div>'+
+      '</div>';
+    document.body.appendChild(overlay);
+    overlay.querySelector('#eCancel').addEventListener('click', function(){ overlay.remove(); });
+    overlay.addEventListener('click', function(e){ if(e.target===overlay) overlay.remove(); });
+    overlay.querySelector('#eSave').addEventListener('click', function(){
+      var name = overlay.querySelector('#eName').value.trim();
+      if(!name){ CT.toast('Enter a name','error'); return; }
+      c.name = name;
+      c.description = overlay.querySelector('#eDesc').value.trim();
+      c.targetReps = overlay.querySelector('#eReps').value || null;
+      var ref = CT.State.userRef();
+      if(ref) ref.collection('chants').doc(c.id).set(c, {merge:true}).catch(function(){ CT.toast('Could not save changes.', 'error'); });
+      overlay.remove(); draw(); CT.toast('Chant updated','success');
     });
   }
   function openNewChant(){
