@@ -1978,6 +1978,27 @@ CT.PAGES.stats = function(view){
 
   var heatmapData = {}; sessions.forEach(function(s){ heatmapData[s.date] = (heatmapData[s.date]||0)+s.duration/60; });
 
+  // tap counter stats (sessions saved from the Tap Counter)
+  var tapSessions = sessions.filter(function(s){ return s.type==='counter'; });
+  function tapsIn(startStr, endStr){
+    return tapSessions.reduce(function(a,s){
+      if(startStr && (s.date<startStr || s.date>endStr)) return a;
+      return a + (s.reps||0);
+    }, 0);
+  }
+  var tapPeriods = [
+    ['Today', tapsIn(today,today)],
+    ['This week', tapsIn(wk.start,wk.end)],
+    ['This month', tapsIn(monthStart,today)],
+    ['This year', tapsIn(yearStart,today)],
+    ['All time', tapsIn(null,null)]
+  ];
+  var tapsByDate = {}; tapSessions.forEach(function(s){ tapsByDate[s.date]=(tapsByDate[s.date]||0)+(s.reps||0); });
+  var tapsLast30 = [], tapsLast30labels = [];
+  for(i=29;i>=0;i--){ var td=new Date(Date.now()-i*86400000); tapsLast30.push(tapsByDate[CT.todayStr(td)]||0); tapsLast30labels.push(td.getDate()+''); }
+  var bestTapSession = tapSessions.reduce(function(a,s){ return Math.max(a, s.reps||0); }, 0);
+  var tapAvg = tapSessions.length ? Math.round(tapsIn(null,null)/tapSessions.length) : 0;
+
   view.innerHTML =
   '<div class="section-head"><h2>Statistics</h2></div>'+
   '<div class="grid grid-3" style="margin-bottom:10px;">'+
@@ -1997,6 +2018,18 @@ CT.PAGES.stats = function(view){
   '</div>'+
   (goalPct!==null ? '<div class="grid grid-2" style="margin-top:10px;">'+statBox(goalPct+'%','Daily goal completion (30d)')+statBox(CT.fmtDuration(periods['All time'].avg),'Average session')+'</div>' :
     '<div class="grid grid-2" style="margin-top:10px;">'+statBox(CT.fmtDuration(periods['All time'].avg),'Average session')+statBox(CT.fmtDuration(periods['All time'].longest),'Longest session ever')+'</div>')+
+
+  '<div class="section-head"><h2>Tap count</h2></div>'+
+  '<div class="grid grid-3" style="margin-bottom:10px;">'+
+  tapPeriods.map(function(p){
+    return '<div class="stat"><div class="lbl" style="margin-bottom:6px;">'+p[0]+'</div>'+
+      '<div class="num" style="font-size:19px;">'+p[1].toLocaleString()+'</div>'+
+      '<div class="lbl">taps</div></div>';
+  }).join('')+
+  '</div>'+
+  '<div class="grid grid-2" style="margin-top:10px;">'+statBox(tapSessions.length,'Tap sessions')+statBox(bestTapSession.toLocaleString(),'Best single session')+'</div>'+
+  '<div class="section-head"><h2>Daily taps (30 days)</h2></div>'+
+  '<div class="card">'+CT.barChartSVG(tapsLast30,tapsLast30labels,{color:'#E8B04A'})+'</div>'+
 
   '<div class="section-head"><h2>Daily minutes (30 days)</h2></div>'+
   '<div class="card">'+CT.barChartSVG(last30,last30labels,{color:'var(--pink)'})+'</div>'+
