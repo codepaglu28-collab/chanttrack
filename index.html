@@ -392,6 +392,21 @@ table.dtable td{padding:8px 8px; border-bottom:1px solid var(--border);}
 .starbtn{cursor:pointer; color:var(--text-faint); transition:color .2s var(--ease), transform .15s var(--ease);}
 .starbtn:active{transform:scale(0.85);}
 .starbtn.active{color:var(--pink);}
+
+.tapbtn{
+  width:min(62vw,240px); height:min(62vw,240px); border-radius:50%; border:1px solid var(--pink-dim);
+  background:radial-gradient(circle at 50% 38%, var(--pink-soft), transparent 78%), var(--surface-2);
+  color:var(--text); cursor:pointer; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px;
+  margin:6px auto 0; user-select:none; -webkit-user-select:none; touch-action:manipulation; -webkit-tap-highlight-color:transparent;
+  transition:transform .12s var(--ease), box-shadow .2s var(--ease);
+  box-shadow:0 14px 40px -16px var(--pink-dim);
+}
+.tapbtn:active, .tapbtn.pulse{transform:scale(0.95);}
+.tapbtn .tapnum{font-family:'Fraunces',serif; font-size:min(20vw,76px); line-height:1; letter-spacing:-0.02em;}
+.tapbtn .taphint{font-size:11px; font-weight:700; letter-spacing:0.08em; color:var(--text-muted);}
+.tapfocus-zone{flex:1; width:100%; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:20px; cursor:pointer; user-select:none; -webkit-user-select:none; touch-action:manipulation; -webkit-tap-highlight-color:transparent;}
+.tapprogress{width:min(80%,320px); height:6px; border-radius:6px; background:var(--surface-2); overflow:hidden; margin:14px auto 0;}
+.tapprogress > div{height:100%; background:var(--pink); border-radius:6px; transition:width .2s var(--ease);}
 </style>
 </head>
 <body>
@@ -664,6 +679,7 @@ var ICONS = {
   bell: ic('<path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/>'),
   clock: ic('<circle cx="12" cy="12" r="9"/><path d="M12 7v5l4 2"/>'),
   stopwatch: ic('<circle cx="12" cy="13" r="8"/><path d="M12 9v4l3 2"/><path d="M9 2h6M12 2v3"/>'),
+  tap: ic('<path d="M9 11V5.5a1.5 1.5 0 0 1 3 0V10"/><path d="M12 10V9a1.5 1.5 0 0 1 3 0v1"/><path d="M15 10a1.5 1.5 0 0 1 3 0v4a7 7 0 0 1-7 7h-1a6 6 0 0 1-5-2.7L3.5 14a1.5 1.5 0 0 1 2.4-1.7L9 15"/>'),
   shield: ic('<path d="M12 2l8 4v6c0 5-3.5 8-8 10-4.5-2-8-5-8-10V6z"/>'),
   home: ic('<path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/>'),
   menu: ic('<path d="M4 7h16M4 12h16M4 17h16"/>'),
@@ -812,7 +828,7 @@ var NAV_ITEMS = [
   {route:'settings', label:'Settings', icon:'settings'},
   {route:'about', label:'About', icon:'info'}
 ];
-var TITLES = {dashboard:'ChantTrack', chant:'Chant', calendar:'Calendar', stats:'Statistics', goals:'Goals', journal:'Journal', chants:'Chants', settings:'Settings', about:'About', search:'Search', timer:'Timer', stopwatch:'Stopwatch'};
+var TITLES = {dashboard:'ChantTrack', chant:'Chant', calendar:'Calendar', stats:'Statistics', goals:'Goals', journal:'Journal', chants:'Chants', settings:'Settings', about:'About', search:'Search', timer:'Timer', stopwatch:'Stopwatch', counter:'Tap Counter'};
 
 function currentRoute(){
   var h = location.hash.replace('#/','') || 'dashboard';
@@ -1322,6 +1338,160 @@ CT.PAGES.stopwatch = function(view){
 };
 })();
 
+/* ============ TAP COUNTER ============ */
+(function(){
+"use strict";
+var CT = window.CT;
+var KEY = 'chanttrack_active_counter_v1';
+var TC = {
+  count:0, target:0, firstTs:null, lastTs:null, label:'', history:[],
+  load: function(){ try{ var raw = localStorage.getItem(KEY); if(raw) Object.assign(this, JSON.parse(raw)); }catch(e){} },
+  persist: function(){ try{ localStorage.setItem(KEY, JSON.stringify({count:this.count,target:this.target,firstTs:this.firstTs,lastTs:this.lastTs,label:this.label})); }catch(e){} },
+  clear: function(){ this.count=0; this.firstTs=null; this.lastTs=null; this.history=[]; try{ localStorage.removeItem(KEY); }catch(e){} },
+  tap: function(){
+    var now = Date.now();
+    if(!this.firstTs) this.firstTs = now;
+    this.history.push(this.lastTs);
+    this.lastTs = now;
+    this.count++;
+    this.persist();
+  },
+  undo: function(){
+    if(this.count<=0) return;
+    this.count--;
+    this.lastTs = this.history.length ? this.history.pop() : null;
+    if(this.count===0){ this.firstTs=null; this.lastTs=null; this.history=[]; }
+    this.persist();
+  },
+  durationSec: function(){ return (this.firstTs && this.lastTs) ? Math.max(1, Math.round((this.lastTs-this.firstTs)/1000)) : 0; }
+};
+TC.load();
+CT.TC = TC;
+
+function buzz(ms){ try{ if(navigator.vibrate) navigator.vibrate(ms); }catch(e){} }
+function progressHTML(){
+  if(!TC.target) return '';
+  var pct = Math.min(100, Math.round(TC.count/TC.target*100));
+  return '<div class="tapprogress"><div style="width:'+pct+'%"></div></div>'+
+    '<div style="font-size:12px; color:var(--text-muted); margin-top:6px; font-weight:700;">'+TC.count+' of '+TC.target+(TC.count>=TC.target?' · target reached 🌸':'')+'</div>';
+}
+
+CT.PAGES.counter = function(view){
+  var targetsRow = [0,27,54,108].map(function(n){
+    return '<button class="chip'+(TC.target===n?' active':'')+'" data-target="'+n+'">'+(n===0?'No target':n)+'</button>';
+  }).join('');
+
+  function draw(){
+    view.innerHTML =
+    '<div class="section-head"><h2>Tap Counter</h2></div>'+
+    '<div class="card" style="text-align:center; padding:30px 20px;">'+
+      '<button class="tapbtn" id="tcTap" aria-label="Tap to count">'+
+        '<span class="tapnum" id="tcNum">'+TC.count+'</span>'+
+        '<span class="taphint">TAP TO COUNT</span>'+
+      '</button>'+
+      '<div id="tcProgress">'+progressHTML()+'</div>'+
+      '<div class="field" style="max-width:280px;margin:20px auto 10px;">'+
+        '<input type="text" id="tcLabel" placeholder="Label this session (optional)" value="'+CT.esc(TC.label)+'">'+
+      '</div>'+
+      '<div class="chip-row" style="justify-content:center; margin-bottom:14px;">'+targetsRow+
+        '<button class="chip" id="tcCustom">Custom</button></div>'+
+      '<div style="display:flex; gap:10px; justify-content:center; flex-wrap:wrap;">'+
+        '<button class="btn btn-secondary" id="tcUndo">Undo</button>'+
+        '<button class="btn btn-secondary" id="tcFocus">'+CT.ICONS.moon+' Focus mode</button>'+
+        '<button class="btn btn-green" id="tcSave" style="'+(TC.count>0?'':'display:none;')+'">'+CT.ICONS.check+' Save session</button>'+
+        '<button class="btn btn-ghost" id="tcReset" style="'+(TC.count>0?'':'display:none;')+'">'+CT.ICONS.reset+' Reset</button>'+
+      '</div>'+
+    '</div>';
+
+    var tapBtn = view.querySelector('#tcTap');
+    tapBtn.addEventListener('click', function(){ doTap(); });
+    /* fast taps: respond on pointerdown-free click; avoid double-fire from touch+click */
+    view.querySelector('#tcLabel').addEventListener('input', function(e){ TC.label=e.target.value; TC.persist(); });
+    view.querySelector('#tcUndo').addEventListener('click', function(){ TC.undo(); update(); });
+    view.querySelector('#tcFocus').addEventListener('click', enterFocus);
+    view.querySelectorAll('[data-target]').forEach(function(b){
+      b.addEventListener('click', function(){ TC.target = parseInt(b.dataset.target,10); TC.persist(); draw(); });
+    });
+    view.querySelector('#tcCustom').addEventListener('click', function(){
+      var v = prompt('Target count (e.g. 108):', TC.target||'');
+      if(v===null) return;
+      var n = parseInt(v,10);
+      TC.target = (isFinite(n) && n>0) ? n : 0;
+      TC.persist(); draw();
+    });
+    var sv = view.querySelector('#tcSave');
+    if(sv) sv.addEventListener('click', function(){
+      var dur = TC.durationSec();
+      var cnt = TC.count;
+      var r = CT.createSession({type:'counter', duration:dur, reps:cnt, title: TC.label||'Tap counter session'});
+      TC.clear(); TC.label=''; TC.persist();
+      CT.toast('Session saved — '+cnt+' taps', 'success');
+      CT.celebrateMilestones(r.newMilestones);
+      location.hash = '#/session/'+r.session.id;
+    });
+    var rs = view.querySelector('#tcReset');
+    if(rs) rs.addEventListener('click', function(){
+      if(TC.count>0 && !confirm('Reset the count to 0?')) return;
+      TC.clear(); TC.persist(); draw();
+    });
+  }
+
+  /* update() only touches text/progress so a tap never lands on a torn-down node */
+  function update(){
+    var n = document.getElementById('tcNum'); if(n) n.textContent = TC.count;
+    var p = document.getElementById('tcProgress'); if(p) p.innerHTML = progressHTML();
+    var f = document.getElementById('focusTcNum'); if(f) f.textContent = TC.count;
+    ['tcSave','tcReset'].forEach(function(id){
+      var el = document.getElementById(id); if(el) el.style.display = TC.count>0 ? '' : 'none';
+    });
+  }
+
+  var reached = false;
+  function doTap(){
+    var before = TC.count;
+    TC.tap();
+    buzz(TC.target && TC.count===TC.target ? [30,60,30] : 12);
+    if(TC.target && TC.count===TC.target){ CT.toast('Target of '+TC.target+' reached 🌸','success'); }
+    var b = document.getElementById('tcTap');
+    if(b){ b.classList.add('pulse'); setTimeout(function(){ b.classList.remove('pulse'); }, 90); }
+    update();
+  }
+
+  function keyHandler(e){
+    if(document.querySelector('.focusscreen')) return;
+    var t = e.target && e.target.tagName;
+    if(t==='INPUT' || t==='TEXTAREA' || t==='BUTTON') return;
+    if(e.code==='Space' || e.key==='Enter'){ e.preventDefault(); doTap(); }
+  }
+  document.addEventListener('keydown', keyHandler);
+
+  function enterFocus(){
+    var overlay = document.createElement('div');
+    overlay.className = 'focusscreen';
+    overlay.innerHTML =
+      '<div class="tapfocus-zone" id="fZone">'+
+        '<div class="lotus-breathe">'+CT.LOTUS_MARK(72)+'</div>'+
+        '<div class="bignum" id="focusTcNum">'+TC.count+'</div>'+
+        '<div style="color:var(--text-muted); font-size:12px; letter-spacing:0.08em; font-weight:700;">TAP ANYWHERE TO COUNT'+(TC.target?' · TARGET '+TC.target:'')+'</div>'+
+      '</div>'+
+      '<div style="display:flex; gap:12px;">'+
+        '<button class="btn btn-secondary" id="fUndo">Undo</button>'+
+        '<button class="btn btn-ghost" id="fExit">'+CT.ICONS.x+' Exit</button>'+
+      '</div>';
+    document.body.appendChild(overlay);
+    overlay.querySelector('#fZone').addEventListener('click', function(){ doTap(); });
+    overlay.querySelector('#fUndo').addEventListener('click', function(){ TC.undo(); update(); });
+    overlay.querySelector('#fExit').addEventListener('click', function(){ overlay.remove(); draw(); });
+  }
+
+  draw();
+  CT._cleanupPage = function(){
+    document.removeEventListener('keydown', keyHandler);
+    var o = document.querySelector('.focusscreen'); if(o) o.remove();
+  };
+};
+})();
+
 /* ============ small chart helpers (SVG) ============ */
 (function(){
 "use strict";
@@ -1474,6 +1644,7 @@ CT.PAGES.dashboard = function(view){
   '<div style="display:flex; gap:12px; margin-top:22px; flex-wrap:wrap;">'+
     '<button class="btn btn-primary" style="flex:1; min-width:150px;" data-nav="timer">'+CT.ICONS.clock+' Start Chanting</button>'+
     '<button class="btn btn-secondary" style="flex:1; min-width:130px;" data-nav="stopwatch">'+CT.ICONS.stopwatch+' Stopwatch</button>'+
+    '<button class="btn btn-secondary" style="flex:1; min-width:130px;" data-nav="counter">'+CT.ICONS.tap+' Tap Counter</button>'+
   '</div>'+
 
   '<div class="section-head"><h2>This week</h2><a data-nav="stats">Statistics →</a></div>'+
@@ -1496,8 +1667,8 @@ function goalCard(title, current, target){
     '<div style="font-size:12px; color:var(--text-muted);">'+Math.round(current)+' / '+Math.round(target)+' min</div>'+
   '</div>';
 }
-function typeColor(type){ return type==='timer'?'var(--pink)':'var(--green)'; }
-function typeLabel(type){ return type==='timer'?'Timer':'Stopwatch'; }
+function typeColor(type){ return type==='timer'?'var(--pink)':(type==='counter'?'var(--gold, #E8B04A)':'var(--green)'); }
+function typeLabel(type){ return type==='timer'?'Timer':(type==='counter'?'Tap Counter':'Stopwatch'); }
 function sessionRow(s){
   var chant = CT.chantById(s.chantId);
   return '<div class="list-item" data-session="'+s.id+'">'+
@@ -1531,6 +1702,7 @@ CT.PAGES.chant = function(view){
   '<div class="grid grid-2">'+
     hubCard('clock','Timer','Countdown with presets','timer','var(--pink)')+
     hubCard('stopwatch','Stopwatch','Count up with laps','stopwatch','var(--green)')+
+    hubCard('tap','Tap Counter','Tap to count each chant','counter','#E8B04A')+
   '</div>'+
   '<div class="section-head"><h2>Quick resume</h2></div>'+
   quickResume();
@@ -1548,6 +1720,8 @@ function quickResume(){
   var items=[];
   if(t.running || t.accumulated>0) items.push('<div class="list-item" data-hub="timer"><div class="dot" style="background:var(--pink)"></div><div class="li-main"><div class="li-title">Timer '+(t.running?'running':'paused')+'</div><div class="li-sub">'+CT.fmtClock(t.presetSeconds-t.elapsed())+' remaining</div></div><div class="li-val">'+CT.ICONS.chevronR+'</div></div>');
   if(sw.running || sw.accumulated>0) items.push('<div class="list-item" data-hub="stopwatch"><div class="dot" style="background:var(--pink)"></div><div class="li-main"><div class="li-title">Stopwatch '+(sw.running?'running':'paused')+'</div><div class="li-sub">'+CT.fmtClockMs(sw.elapsedMs())+' elapsed</div></div><div class="li-val">'+CT.ICONS.chevronR+'</div></div>');
+  var tc = CT.TC;
+  if(tc && tc.count>0) items.push('<div class="list-item" data-hub="counter"><div class="dot" style="background:#E8B04A"></div><div class="li-main"><div class="li-title">Tap counter in progress</div><div class="li-sub">'+tc.count+(tc.target?' / '+tc.target:'')+' taps</div></div><div class="li-val">'+CT.ICONS.chevronR+'</div></div>');
   if(!items.length) return '<div class="empty" style="padding:28px;"><p class="sub" style="margin:0;">Nothing in progress right now.</p></div>';
   return items.join('');
 }
